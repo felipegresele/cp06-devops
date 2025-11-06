@@ -1,0 +1,102 @@
+# Azure DevOps Pipeline - Projeto DimDim (RM556955)
+# Automação completa: Build, Teste, Docker Build/Push e Deploy no Azure WebApp
+
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Variáveis personalizadas do projeto RM556955
+  ACR_NAME: 'dimdimrm556955acr'
+  IMAGE_NAME: 'transactions-services'
+  WEBAPP_NAME: 'dimdimrm556955-webapp'
+  RESOURCE_GROUP: 'dimdimrm556955-rg'
+  TAG: '$(Build.BuildId)'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  # ----------------------------- #
+  # 1️⃣ STAGE: Build & Test
+  # ----------------------------- #
+  - stage: BuildAndTest
+    displayName: "Build e Teste da aplicação"
+    jobs:
+      - job: build
+        steps:
+          - checkout: self
+            displayName: "Checkout do código fonte"
+
+          - task: Gradle@2
+            displayName: "Compilar aplicação com Gradle"
+            inputs:
+              gradleWrapperFile: 'gradlew'
+              gradleOptions: '-Xmx3072m'
+              tasks: 'clean build'
+
+          - task: Gradle@2
+            displayName: "Executar testes automatizados"
+            inputs:
+              gradleWrapperFile: 'gradlew'
+              gradleOptions: '-Xmx3072m'
+              tasks: 'test'
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publicar artefatos de build"
+            inputs:
+              PathtoPublish: 'build/libs'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # ----------------------------- #
+  # 2️⃣ STAGE: Docker Build & Push
+  # ----------------------------- #
+  - stage: DockerBuildAndPush
+    displayName: "Build e Push da imagem Docker"
+    dependsOn: BuildAndTest
+    jobs:
+      - job: docker
+        steps:
+          - task: Docker@2
+            displayName: "Login no Azure Container Registry"
+            inputs:
+              command: login
+              containerRegistry: 'dimdimrm556955acr'
+
+          - task: Docker@2
+            displayName: "Build da imagem Docker"
+            inputs:
+              command: build
+              Dockerfile: '**/Dockerfile'
+              tags: |
+                dimdimrm556955acr.azurecr.io/transactions-services:$(TAG)
+
+          - task: Docker@2
+            displayName: "Push da imagem para o ACR"
+            inputs:
+              command: push
+              tags: |
+                dimdimrm556955acr.azurecr.io/transactions-services:$(TAG)
+
+  # ----------------------------- #
+  # 3️⃣ STAGE: Deploy no WebApp
+  # ----------------------------- #
+  - stage: Deploy
+    displayName: "Deploy automatizado no Azure WebApp"
+    dependsOn: DockerBuildAndPush
+    jobs:
+      - deployment: deployWebApp
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebAppContainer@2
+                  displayName: "Deploy da imagem no Azure WebApp (RM556955)"
+                  inputs:
+                    azureSubscription: 'azureServiceConnection'
+                    appName: 'dimdimrm556955-webapp'
+                    imageName: 'dimdimrm556955acr.azurecr.io/transactions-services:$(TAG)'
+                    containerCommand: ''
