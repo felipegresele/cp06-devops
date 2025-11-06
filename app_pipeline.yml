@@ -93,10 +93,9 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: AzureWebAppContainer@2
-                  displayName: "Deploy da imagem no Azure WebApp (RM556955)"
+                - task: AzureWebApp@1
+                  displayName: "Deploy da imagem Docker no Azure WebApp (RM556955)"
                   inputs:
                     azureSubscription: 'azureServiceConnection'
                     appName: 'dimdimrm556955-webapp'
-                    imageName: 'dimdimrm556955acr.azurecr.io/transactions-services:$(TAG)'
-                    containerCommand: ''
+                    images: 'dimdimrm556955acr.azurecr.io/transactions-services:$(TAG)'
